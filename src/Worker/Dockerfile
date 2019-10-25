@@ -1,20 +1,31 @@
-FROM mcr.microsoft.com/dotnet/core/aspnet:2.2-alpine AS base
-WORKDIR /app
-EXPOSE 80
+FROM mcr.microsoft.com/dotnet/core/aspnet:2.2-stretch-slim AS base
 
-FROM mcr.microsoft.com/dotnet/core/sdk:2.2-alpine AS build
-ARG BUILDMODE
 WORKDIR /app
-ADD . /app
-RUN dotnet restore
-RUN dotnet build --no-restore -c ${BUILDMODE}
+
+EXPOSE 80
+EXPOSE 443
+
+FROM mcr.microsoft.com/dotnet/core/sdk:2.2-stretch AS build
+
+WORKDIR /src
+
+COPY Worker/Worker.csproj Worker/
+COPY Hangfire.Lib/Hangfire.Lib.csproj Hangfire.Lib/
+COPY Workflow.Lib/Workflow.Lib.csproj Workflow.Lib/
+
+RUN dotnet restore "Worker/Worker.csproj"
+
+COPY . .
+
+WORKDIR "/src/Worker"
+
+RUN dotnet build "Worker.csproj" -c Release -o /app/build
 
 FROM build AS publish
-ARG BUILDMODE
-RUN dotnet publish --no-build -c ${BUILDMODE} -o /app/out
+RUN dotnet publish "Worker.csproj" -c Release -o /app/publish
 
 FROM base AS final
-WORKDIR /app/out
-RUN ls -lah
-COPY --from=publish /app/out .
+WORKDIR /app
+
+COPY --from=publish /app/publish .
 ENTRYPOINT ["dotnet", "Worker.dll"]
